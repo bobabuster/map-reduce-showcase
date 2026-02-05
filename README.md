@@ -4,6 +4,8 @@ This project implements a fault-tolerant MapReduce coordinator that
 manages job submission, worker registration, task scheduling, and
 failure recovery.
 
+Core logic I wrote is mostly in `src/coordinator/mod.rs`
+
 
 ## Architecture
 

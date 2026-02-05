@@ -1,15 +1,16 @@
-Design: MapReduce Coordinator
 
 This document describes the internal design of a centralized MapReduce coordinator, including its data structures, scheduling logic, RPC behavior, and fault tolerance mechanisms.
 
-1. Coordinator State
+# 1. Coordinator State
 
 All shared coordinator state is protected by a mutex and stored in a single CoordinatorState structure.
 
 Coordinator
+```rust
 pub struct Coordinator {
     inner: Arc<Mutex<CoordinatorState>>,
 }
+```
 
 CoordinatorState
 - The coordinator maintains global metadata for workers, jobs, and scheduling:
@@ -21,32 +22,37 @@ CoordinatorState
 
 Jobs remain in the queue until all map and reduce tasks complete.
 
-2. Worker Metadata
+# 2. Worker Metadata
 
 Each worker is tracked using a WorkerMeta structure:
 
+```rust
 struct WorkerMeta {
     worker_id: u16,
     heartbeat: Option<Instant>,
     assigned_task: Option<TaskID>,
     completed: Vec<TaskID>,
 }
+```
 
 The coordinator uses heartbeats to detect worker's alive status and tracks both assigned and completed tasks to support fault recovery.
 
-3. Job and Task Metadata
+# 3. Job and Task Metadata
 Task Identification
 
 Each task is uniquely identified by:
 
+```rust
 struct TaskID {
     job_id: u32,
     task_index: u32,
     task_type: TaskType,
 }
+```
 
 Task types are either Map or Reduce.
 
+```rust
 Task State
 enum TaskStatus {
     Pending,
@@ -61,10 +67,12 @@ struct TaskMeta {
     file: Option<String>,
     assigned_worker: Option<u16>,
 }
+```
 
 Each task explicitly tracks its status and assigned worker.
 
 Job Metadata
+```rust
 struct JobMeta {
     job_id: u32,
     files: Vec<String>,
@@ -79,10 +87,11 @@ struct JobMeta {
     map_tasks: Vec<TaskMeta>,
     reduce_tasks: Vec<TaskMeta>,
 }
+```
 
 A job is considered complete only when all map and reduce tasks have finished successfully.
 
-4. Task Lifecycle
+# 4. Task Lifecycle
 
 Tasks transition through the following states:
 
@@ -90,15 +99,15 @@ Pending → Assigned → Completed
 
 State transitions occur atomically while holding the coordinator lock.
 
-5. Scheduling Model
+# 5. Scheduling Model
 
-Jobs are scheduled in FIFO order using job_queue
-Map tasks are always scheduled before reduce tasks
-Reduce tasks are eligible only after all map tasks complete
-Workers pull tasks from the coordinator via RPC
-If a job has no eligible tasks, scheduling proceeds to the next job in the queue.
+- Jobs are scheduled in FIFO order using job_queue
+- Map tasks are always scheduled before reduce tasks
+- Reduce tasks are eligible only after all map tasks complete
+- Workers pull tasks from the coordinator via RPC
+- If a job has no eligible tasks, scheduling proceeds to the next job in the queue.
 
-6. RPC Interfaces
+# 6. RPC Interfaces
 SubmitJob
 - Validates application name
 - Initializes job metadata
@@ -118,20 +127,20 @@ FinishTask
 - Updates worker and job metadata accordingly
 
 FailTask
-Workers invoke this RPC when a task fails.
+- Workers invoke this RPC when a task fails.
 
 Two failure modes are supported:
 - Retryable failures: tasks are reset to Pending
 - Fatal failures: the job is marked as failed
 
 PollJob
-Returns job status to the client:
+- Returns job status to the client
 - done = true when all tasks complete
 - failed = true if the job encounters an unrecoverable error
 
-7. Fault Tolerance
+# 7. Fault Tolerance
 Worker Failures
-Workers are considered failed if their heartbeat exceeds a timeout.
+- Workers are considered failed if their heartbeat exceeds a timeout.
 
 When a worker fails:
 - Assigned map tasks are reset to Pending
@@ -153,7 +162,7 @@ In these cases:
 - Errors are recorded in job metadata
 - Clients observe failure via PollJob
 
-8. Concurrency and Correctness
+# 8. Concurrency
 
 All coordinator state is protected by a single mutex
 - Task assignment and failure handling are atomic
